@@ -1,26 +1,44 @@
-# Install transformers from source - only needed for versions <= v4.34
-# pip install git+https://github.com/huggingface/transformers.git
-# pip install accelerate
-
 import torch
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.bfloat16, device_map="auto")
+# Load the model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
-# We use the tokenizer's chat template to format each message - see https://huggingface.co/docs/transformers/main/en/chat_templating
-messages = [
-    {
-        "role": "system",
-        "content": "You are a friendly chatbot who always responds in the style of a pirate",
-    },
-    {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
-]
-prompt = pipe.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-outputs = pipe(prompt, max_new_tokens=256, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
-print(outputs[0]["generated_text"])
-# <|system|>
-# You are a friendly chatbot who always responds in the style of a pirate.</s>
-# <|user|>
-# How many helicopters can a human eat in one sitting?</s>
-# <|assistant|>
-# ...
+def generate_response(user_input, past_chat_history=None, max_length=256):
+    # Encode the user input and concatenate it with past chat history, if it exists
+    new_user_input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors='pt')
+    
+    # Prepare the bot's input IDs: either concatenate with history or just use the new input
+    bot_input_ids = torch.cat([past_chat_history, new_user_input_ids], dim=-1) if past_chat_history is not None else new_user_input_ids
+
+    # Compute attention masks (1 for real tokens, 0 for padding)
+    attention_mask = torch.ones(bot_input_ids.shape, dtype=torch.long)  # assuming bot_input_ids is a tensor
+
+    # Generate a response from the model with attention masks
+    chat_output = model.generate(bot_input_ids, attention_mask=attention_mask, max_length=max_length, pad_token_id=tokenizer.eos_token_id)
+    
+    return chat_output[:, bot_input_ids.shape[-1]:]
+
+
+def chat():
+    # Initialize chat history (None at the beginning)
+    chat_history = None
+    print("Chatbot: Hello! Ask me anything or type 'quit' to end.")
+
+    while True:
+        # Get user input
+        user_input = input("You: ")
+        if user_input.lower() == 'quit':
+            break
+
+        # Generate the response
+        chat_output = generate_response(user_input, chat_history)
+        chat_history = chat_output  # Update chat history with the new response
+
+        # Decode and print the response
+        response_text = tokenizer.decode(chat_output[0], skip_special_tokens=True)
+        print("Chatbot:", response_text)
+
+# Start chatting
+chat()
