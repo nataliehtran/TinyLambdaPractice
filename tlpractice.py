@@ -1,7 +1,9 @@
 import torch
+#AKA PyTorch which helps with making and training neural networks 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Load the model and tokenizer
+# Tokenizer splits the sentence by words/characters
 tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
